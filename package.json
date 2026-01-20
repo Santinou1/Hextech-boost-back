@@ -1,0 +1,30 @@
+{
+  "name": "hextech-boost-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Hextech Boost - League of Legends Elo Boosting Service",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "init-db": "node src/database/init-simple.js"
+  },
+  "keywords": [
+    "express",
+    "sqlite",
+    "api",
+    "lol",
+    "boosting"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "sql.js": "^1.13.0"
+  }
+}

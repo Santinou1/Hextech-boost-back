@@ -1,0 +1,409 @@
+{
+  "info": {
+    "name": "Hextech Boost API v2",
+    "description": "API completa para el servicio de Elo Boosting con sistema de cotizaciones por rango",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "booster_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Register Client",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newclient@test.com\",\n  \"password\": \"password123\",\n  \"username\": \"newclient\",\n  \"role\": \"client\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"admin_token\", pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@hextech.com\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login Booster",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"booster_token\", pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"apexvayne@hextech.com\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "profile"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "⭐ Boosters",
+      "item": [
+        {
+          "name": "Get All Boosters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/boosters",
+              "host": ["{{base_url}}"],
+              "path": ["api", "boosters"]
+            }
+          }
+        },
+        {
+          "name": "Get Booster By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/boosters/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "boosters", "1"]
+            }
+          }
+        },
+        {
+          "name": "Get My Booster Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{booster_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/boosters/me/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "boosters", "me", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Upsert Booster Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{booster_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"display_name\": \"ApexVayne\",\n  \"current_rank\": \"Grandmaster\",\n  \"peak_rank\": \"Challenger\",\n  \"main_roles\": \"ADC, Mid\",\n  \"main_champions\": \"Vayne, Jinx, Kai'Sa\",\n  \"languages\": \"Español, English\",\n  \"server\": \"LAS\",\n  \"duo_discount\": 20,\n  \"bio\": \"Challenger ADC main con 5 años de experiencia\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/boosters/me/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "boosters", "me", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Availability",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{booster_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/boosters/me/availability",
+              "host": ["{{base_url}}"],
+              "path": ["api", "boosters", "me", "availability"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💰 Pricing",
+      "item": [
+        {
+          "name": "Get Booster Pricing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/pricing/booster/2",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pricing", "booster", "2"]
+            }
+          }
+        },
+        {
+          "name": "Calculate Price",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/pricing/booster/2/calculate?from_rank=Gold&from_division=IV&to_rank=Platinum&to_division=IV&boost_type=solo",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pricing", "booster", "2", "calculate"],
+              "query": [
+                {
+                  "key": "from_rank",
+                  "value": "Gold"
+                },
+                {
+                  "key": "from_division",
+                  "value": "IV"
+                },
+                {
+                  "key": "to_rank",
+                  "value": "Platinum"
+                },
+                {
+                  "key": "to_division",
+                  "value": "IV"
+                },
+                {
+                  "key": "boost_type",
+                  "value": "solo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Pricing",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{booster_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/pricing/my-pricing",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pricing", "my-pricing"]
+            }
+          }
+        },
+        {
+          "name": "Upsert My Pricing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{booster_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pricing\": [\n    {\n      \"from_rank\": \"Iron\",\n      \"from_division\": \"IV\",\n      \"to_rank\": \"Bronze\",\n      \"to_division\": \"IV\",\n      \"price\": 15.00,\n      \"estimated_hours\": 12\n    },\n    {\n      \"from_rank\": \"Bronze\",\n      \"from_division\": \"IV\",\n      \"to_rank\": \"Silver\",\n      \"to_division\": \"IV\",\n      \"price\": 20.00,\n      \"estimated_hours\": 18\n    },\n    {\n      \"from_rank\": \"Silver\",\n      \"from_division\": \"IV\",\n      \"to_rank\": \"Gold\",\n      \"to_division\": \"IV\",\n      \"price\": 30.00,\n      \"estimated_hours\": 24\n    },\n    {\n      \"from_rank\": \"Gold\",\n      \"from_division\": \"IV\",\n      \"to_rank\": \"Platinum\",\n      \"to_division\": \"IV\",\n      \"price\": 45.00,\n      \"estimated_hours\": 36\n    },\n    {\n      \"from_rank\": \"Platinum\",\n      \"from_division\": \"IV\",\n      \"to_rank\": \"Emerald\",\n      \"to_division\": \"IV\",\n      \"price\": 60.00,\n      \"estimated_hours\": 48\n    },\n    {\n      \"from_rank\": \"Emerald\",\n      \"from_division\": \"IV\",\n      \"to_rank\": \"Diamond\",\n      \"to_division\": \"IV\",\n      \"price\": 80.00,\n      \"estimated_hours\": 60\n    },\n    {\n      \"from_rank\": \"Diamond\",\n      \"from_division\": \"IV\",\n      \"to_rank\": \"Master\",\n      \"to_division\": \"I\",\n      \"price\": 120.00,\n      \"estimated_hours\": 72\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/pricing/my-pricing",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pricing", "my-pricing"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 Admin",
+      "item": [
+        {
+          "name": "Get Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/statistics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "statistics"]
+            }
+          }
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get All Boosters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/boosters",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "boosters"]
+            }
+          }
+        },
+        {
+          "name": "Get All Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/5",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "5"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
