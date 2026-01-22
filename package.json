@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "init-db": "node src/database/init-simple.js"
+    "init-db": "node src/database/init-simple.js",
+    "recreate-db": "node src/database/recreate-db.js",
+    "clean-boosters": "node src/database/clean-fake-boosters.js"
   },
   "keywords": [
     "express",

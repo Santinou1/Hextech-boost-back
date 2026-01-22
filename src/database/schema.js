@@ -29,10 +29,11 @@ export const createTables = (db) => {
       completed_orders INTEGER DEFAULT 0,
       rating REAL DEFAULT 5.0,
       total_reviews INTEGER DEFAULT 0,
-      duo_discount REAL DEFAULT 20,
+      duo_extra_cost REAL DEFAULT 20,
       available BOOLEAN DEFAULT 1,
       bio TEXT,
       avatar_url TEXT,
+      specialties TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

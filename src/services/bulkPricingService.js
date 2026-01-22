@@ -1,3 +1,4 @@
+// Divisions are ordered from lowest to highest (IV is lowest, I is highest)
 const RANKS = [
   { name: 'Iron', divisions: ['IV', 'III', 'II', 'I'] },
   { name: 'Bronze', divisions: ['IV', 'III', 'II', 'I'] },
@@ -5,7 +6,10 @@ const RANKS = [
   { name: 'Gold', divisions: ['IV', 'III', 'II', 'I'] },
   { name: 'Platinum', divisions: ['IV', 'III', 'II', 'I'] },
   { name: 'Emerald', divisions: ['IV', 'III', 'II', 'I'] },
-  { name: 'Diamond', divisions: ['IV', 'III', 'II', 'I'] }
+  { name: 'Diamond', divisions: ['IV', 'III', 'II', 'I'] },
+  { name: 'Master', divisions: ['I'] },
+  { name: 'Grandmaster', divisions: ['I'] },
+  { name: 'Challenger', divisions: ['I'] }
 ];
 
 /**
@@ -45,9 +49,9 @@ function getLeagueFromPosition(position) {
 }
 
 /**
- * Calcula el precio de un boost
+ * Calcula el precio de un boost considerando precios individuales
  */
-function calculateBoostPrice(config, fromLeague, fromDivision, toLeague, toDivision) {
+function calculateBoostPrice(config, fromLeague, fromDivision, toLeague, toDivision, individualPrices = []) {
   const { leagueBasePrices, transitionCosts, divisionOverrides = {} } = config;
   
   // 1. Validar inputs
@@ -57,7 +61,6 @@ function calculateBoostPrice(config, fromLeague, fromDivision, toLeague, toDivis
   if (fromPos >= toPos) {
     throw new Error('Destination rank must be higher than origin rank');
   }
-
   
   // 2. Generar camino de pasos
   const breakdown = [];
@@ -66,27 +69,24 @@ function calculateBoostPrice(config, fromLeague, fromDivision, toLeague, toDivis
   // 3. Iterar por cada paso
   let currentLeague = null;
   let stepsInCurrentLeague = 0;
+  let currentLeagueStartPos = fromPos + 1;
   
   for (let step = fromPos + 1; step <= toPos; step++) {
     const stepLeague = getLeagueFromPosition(step);
     
     // Si cambiamos de liga
     if (stepLeague !== currentLeague && currentLeague !== null) {
-      // Sumar costo de pasos en liga anterior
-      const pricePerStep = leagueBasePrices[currentLeague];
-      if (pricePerStep === undefined) {
-        throw new Error(`Missing base price for league ${currentLeague}`);
-      }
+      // Calcular costo de pasos en liga anterior (considerando individuales)
+      const leagueCost = calculateLeagueStepsCost(
+        currentLeague,
+        currentLeagueStartPos,
+        step - 1,
+        leagueBasePrices[currentLeague],
+        individualPrices,
+        breakdown
+      );
       
-      const leagueCost = stepsInCurrentLeague * pricePerStep;
       totalCost += leagueCost;
-      breakdown.push({
-        type: 'league_steps',
-        league: currentLeague,
-        steps: stepsInCurrentLeague,
-        pricePerStep: pricePerStep,
-        cost: leagueCost
-      });
       
       // Sumar costo de transición
       const transitionKey = `${currentLeague}->${stepLeague}`;
@@ -105,6 +105,7 @@ function calculateBoostPrice(config, fromLeague, fromDivision, toLeague, toDivis
       
       // Resetear contador
       stepsInCurrentLeague = 0;
+      currentLeagueStartPos = step;
     }
     
     currentLeague = stepLeague;
@@ -112,26 +113,115 @@ function calculateBoostPrice(config, fromLeague, fromDivision, toLeague, toDivis
   }
   
   // 4. Procesar última liga
-  const pricePerStep = leagueBasePrices[currentLeague];
-  if (pricePerStep === undefined) {
-    throw new Error(`Missing base price for league ${currentLeague}`);
-  }
+  const leagueCost = calculateLeagueStepsCost(
+    currentLeague,
+    currentLeagueStartPos,
+    toPos,
+    leagueBasePrices[currentLeague],
+    individualPrices,
+    breakdown
+  );
   
-  const leagueCost = stepsInCurrentLeague * pricePerStep;
   totalCost += leagueCost;
-  breakdown.push({
-    type: 'league_steps',
-    league: currentLeague,
-    steps: stepsInCurrentLeague,
-    pricePerStep: pricePerStep,
-    cost: leagueCost
-  });
   
   // 5. Retornar resultado
   return {
     total: parseFloat(totalCost.toFixed(2)),
     breakdown: breakdown
   };
+}
+
+/**
+ * Calcula el costo de pasos dentro de una liga, considerando precios individuales
+ */
+function calculateLeagueStepsCost(league, startPos, endPos, pricePerStep, individualPrices, breakdown) {
+  if (pricePerStep === undefined) {
+    throw new Error(`Missing base price for league ${league}`);
+  }
+  
+  let totalCost = 0;
+  let bulkSteps = 0;
+  let currentPos = startPos;
+  
+  // Iterar por cada paso en esta liga
+  while (currentPos <= endPos) {
+    const fromInfo = getLeagueAndDivisionFromPosition(currentPos - 1);
+    const toInfo = getLeagueAndDivisionFromPosition(currentPos);
+    
+    // Buscar si hay precio individual para este paso específico
+    const individualPrice = individualPrices.find(p => 
+      p.from_rank === fromInfo.league &&
+      p.from_division === fromInfo.division &&
+      p.to_rank === toInfo.league &&
+      p.to_division === toInfo.division
+    );
+    
+    if (individualPrice) {
+      // Si hay pasos bulk acumulados, agregarlos primero
+      if (bulkSteps > 0) {
+        const bulkCost = bulkSteps * pricePerStep;
+        totalCost += bulkCost;
+        breakdown.push({
+          type: 'league_steps',
+          league: league,
+          steps: bulkSteps,
+          pricePerStep: pricePerStep,
+          cost: bulkCost
+        });
+        bulkSteps = 0;
+      }
+      
+      // Agregar precio individual
+      totalCost += individualPrice.price;
+      breakdown.push({
+        type: 'individual_step',
+        from: `${fromInfo.league} ${fromInfo.division}`,
+        to: `${toInfo.league} ${toInfo.division}`,
+        price: individualPrice.price,
+        cost: individualPrice.price
+      });
+    } else {
+      // Acumular paso bulk
+      bulkSteps++;
+    }
+    
+    currentPos++;
+  }
+  
+  // Agregar pasos bulk restantes
+  if (bulkSteps > 0) {
+    const bulkCost = bulkSteps * pricePerStep;
+    totalCost += bulkCost;
+    breakdown.push({
+      type: 'league_steps',
+      league: league,
+      steps: bulkSteps,
+      pricePerStep: pricePerStep,
+      cost: bulkCost
+    });
+  }
+  
+  return totalCost;
+}
+
+/**
+ * Obtiene la liga y división de una posición
+ */
+function getLeagueAndDivisionFromPosition(position) {
+  let currentPos = 0;
+  
+  for (const rank of RANKS) {
+    if (position < currentPos + rank.divisions.length) {
+      const divIndex = position - currentPos;
+      return {
+        league: rank.name,
+        division: rank.divisions[divIndex]
+      };
+    }
+    currentPos += rank.divisions.length;
+  }
+  
+  throw new Error(`Invalid position ${position}`);
 }
 
 /**
@@ -179,5 +269,6 @@ export {
   calculateBoostPrice,
   validateBulkConfig,
   getRankPosition,
-  getLeagueFromPosition
+  getLeagueFromPosition,
+  getLeagueAndDivisionFromPosition
 };

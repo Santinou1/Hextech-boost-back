@@ -67,7 +67,7 @@ export const upsertBoosterProfile = (req, res) => {
     main_champions,
     languages,
     server,
-    duo_discount,
+    duo_extra_cost,
     bio,
     avatar_url
   } = req.body;
@@ -89,15 +89,23 @@ export const upsertBoosterProfile = (req, res) => {
           main_champions = ?,
           languages = ?,
           server = ?,
-          duo_discount = ?,
+          duo_extra_cost = ?,
           bio = ?,
           avatar_url = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE user_id = ?
       `, [
-        display_name, current_rank, peak_rank, main_roles, main_champions,
-        languages, server, duo_discount || 20,
-        bio, avatar_url, req.user.id
+        display_name, 
+        current_rank, 
+        peak_rank, 
+        main_roles, 
+        main_champions || null,
+        languages, 
+        server, 
+        duo_extra_cost || 20,
+        bio || null, 
+        avatar_url || null, 
+        req.user.id
       ]);
 
       const profile = queryOne('SELECT * FROM booster_profiles WHERE user_id = ?', [req.user.id]);
@@ -106,11 +114,20 @@ export const upsertBoosterProfile = (req, res) => {
       const result = run(`
         INSERT INTO booster_profiles (
           user_id, display_name, current_rank, peak_rank, main_roles, main_champions,
-          languages, server, duo_discount, bio, avatar_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          languages, server, duo_extra_cost, bio, avatar_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        req.user.id, display_name, current_rank, peak_rank, main_roles, main_champions,
-        languages, server, duo_discount || 20, bio, avatar_url
+        req.user.id, 
+        display_name, 
+        current_rank, 
+        peak_rank, 
+        main_roles, 
+        main_champions || null,
+        languages, 
+        server, 
+        duo_extra_cost || 20, 
+        bio || null, 
+        avatar_url || null
       ]);
 
       const profile = queryOne('SELECT * FROM booster_profiles WHERE id = ?', [result.lastInsertRowid]);

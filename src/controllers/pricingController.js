@@ -1,4 +1,5 @@
 import { query, queryOne, run } from '../database/db.js';
+import { calculateBoostPrice } from '../services/bulkPricingService.js';
 
 // ==================== BOOSTER PRICING ====================
 
@@ -48,18 +49,46 @@ export const upsertPricing = (req, res) => {
   }
 };
 
-// Obtener cotizaciones de un booster
+// Obtener cotizaciones de un booster (UNIFICADO: muestra bulk + individuales)
 export const getBoosterPricing = (req, res) => {
   const { boosterId } = req.params;
 
   try {
-    const pricing = query(`
+    // Obtener precios individuales
+    const individualPricing = query(`
       SELECT * FROM booster_pricing 
       WHERE booster_id = ? 
       ORDER BY from_rank, from_division
     `, [boosterId]);
 
-    res.json({ pricing });
+    // Obtener configuración bulk
+    const bulkConfig = queryOne(`
+      SELECT league_base_prices, transition_costs, division_overrides
+      FROM booster_bulk_pricing
+      WHERE booster_id = ?
+    `, [boosterId]);
+
+    let bulkPricingConfig = null;
+    if (bulkConfig) {
+      bulkPricingConfig = {
+        leagueBasePrices: bulkConfig.league_base_prices && bulkConfig.league_base_prices !== 'undefined'
+          ? JSON.parse(bulkConfig.league_base_prices)
+          : {},
+        transitionCosts: bulkConfig.transition_costs && bulkConfig.transition_costs !== 'undefined'
+          ? JSON.parse(bulkConfig.transition_costs)
+          : {},
+        divisionOverrides: bulkConfig.division_overrides && bulkConfig.division_overrides !== 'undefined'
+          ? JSON.parse(bulkConfig.division_overrides)
+          : {}
+      };
+    }
+
+    res.json({ 
+      individualPricing,
+      bulkPricingConfig,
+      hasBulkPricing: bulkConfig !== null,
+      hasIndividualPricing: individualPricing.length > 0
+    });
   } catch (error) {
     console.error('Get booster pricing error:', error);
     res.status(500).json({ error: 'Error fetching pricing' });
@@ -84,7 +113,7 @@ export const getMyPricing = (req, res) => {
   }
 };
 
-// Calcular precio para un boost específico
+// Calcular precio para un boost específico (UNIFICADO: bulk + individual)
 export const calculatePrice = (req, res) => {
   const { boosterId } = req.params;
   const { from_rank, from_division, to_rank, to_division, boost_type } = req.query;
@@ -94,8 +123,8 @@ export const calculatePrice = (req, res) => {
   }
 
   try {
-    // Buscar cotización exacta
-    const pricing = queryOne(`
+    // 1. Primero buscar precio individual específico
+    const individualPricing = queryOne(`
       SELECT * FROM booster_pricing 
       WHERE booster_id = ? 
         AND from_rank = ? 
@@ -104,24 +133,147 @@ export const calculatePrice = (req, res) => {
         AND to_division = ?
     `, [boosterId, from_rank, from_division, to_rank, to_division]);
 
-    if (!pricing) {
-      return res.status(404).json({ error: 'Pricing not found for this rank combination' });
+    let basePrice = null;
+    let priceSource = null;
+
+    if (individualPricing) {
+      // Usar precio individual si existe
+      basePrice = individualPricing.price;
+      priceSource = 'individual';
+    } else {
+      // 2. Si no hay precio individual, calcular con bulk pricing
+      const bulkConfig = queryOne(`
+        SELECT league_base_prices, transition_costs, division_overrides
+        FROM booster_bulk_pricing
+        WHERE booster_id = ?
+      `, [boosterId]);
+
+      if (bulkConfig) {
+        try {
+          // Obtener TODOS los precios individuales para considerarlos en el cálculo
+          const allIndividualPrices = query(`
+            SELECT from_rank, from_division, to_rank, to_division, price
+            FROM booster_pricing
+            WHERE booster_id = ?
+          `, [boosterId]);
+          
+          const leagueBasePrices = bulkConfig.league_base_prices && bulkConfig.league_base_prices !== 'undefined'
+            ? JSON.parse(bulkConfig.league_base_prices)
+            : {};
+          
+          const transitionCosts = bulkConfig.transition_costs && bulkConfig.transition_costs !== 'undefined'
+            ? JSON.parse(bulkConfig.transition_costs)
+            : {};
+          
+          const divisionOverrides = bulkConfig.division_overrides && bulkConfig.division_overrides !== 'undefined'
+            ? JSON.parse(bulkConfig.division_overrides)
+            : {};
+
+          const parsedConfig = {
+            leagueBasePrices,
+            transitionCosts,
+            divisionOverrides
+          };
+
+          const bulkResult = calculateBoostPrice(
+            parsedConfig,
+            from_rank,
+            from_division,
+            to_rank,
+            to_division,
+            allIndividualPrices
+          );
+
+          basePrice = bulkResult.total;
+          priceSource = 'bulk';
+        } catch (bulkError) {
+          console.error('Error calculating bulk price:', bulkError);
+        }
+      }
     }
 
-    let finalPrice = pricing.price;
+    if (basePrice === null) {
+      return res.status(404).json({ 
+        error: 'No pricing found. Please configure either individual prices or bulk pricing.' 
+      });
+    }
 
-    // Aplicar descuento de duo si aplica
+    let finalPrice = basePrice;
+    let breakdown = [];
+
+    // Crear breakdown básico
+    if (priceSource === 'individual') {
+      breakdown.push({
+        type: 'individual',
+        description: `Precio individual: ${from_rank} ${from_division} → ${to_rank} ${to_division}`,
+        cost: basePrice
+      });
+    } else {
+      // Si es bulk, el breakdown ya viene del servicio
+      const bulkConfig = queryOne(`
+        SELECT league_base_prices, transition_costs, division_overrides
+        FROM booster_bulk_pricing
+        WHERE booster_id = ?
+      `, [boosterId]);
+
+      if (bulkConfig) {
+        const allIndividualPrices = query(`
+          SELECT from_rank, from_division, to_rank, to_division, price
+          FROM booster_pricing
+          WHERE booster_id = ?
+        `, [boosterId]);
+        
+        const leagueBasePrices = bulkConfig.league_base_prices && bulkConfig.league_base_prices !== 'undefined'
+          ? JSON.parse(bulkConfig.league_base_prices)
+          : {};
+        
+        const transitionCosts = bulkConfig.transition_costs && bulkConfig.transition_costs !== 'undefined'
+          ? JSON.parse(bulkConfig.transition_costs)
+          : {};
+        
+        const divisionOverrides = bulkConfig.division_overrides && bulkConfig.division_overrides !== 'undefined'
+          ? JSON.parse(bulkConfig.division_overrides)
+          : {};
+
+        const parsedConfig = {
+          leagueBasePrices,
+          transitionCosts,
+          divisionOverrides
+        };
+
+        const bulkResult = calculateBoostPrice(
+          parsedConfig,
+          from_rank,
+          from_division,
+          to_rank,
+          to_division,
+          allIndividualPrices
+        );
+
+        breakdown = bulkResult.breakdown || [];
+      }
+    }
+
+    // Aplicar costo adicional de duo si aplica
     if (boost_type === 'duo') {
-      const profile = queryOne('SELECT duo_discount FROM booster_profiles WHERE user_id = ?', [boosterId]);
-      if (profile && profile.duo_discount) {
-        finalPrice = finalPrice * (1 - profile.duo_discount / 100);
+      const profile = queryOne('SELECT duo_extra_cost FROM booster_profiles WHERE user_id = ?', [boosterId]);
+      if (profile && profile.duo_extra_cost) {
+        const duoCost = basePrice * (profile.duo_extra_cost / 100);
+        breakdown.push({
+          type: 'duo_extra',
+          description: `Duo Boost (+${profile.duo_extra_cost}%)`,
+          cost: duoCost
+        });
+        finalPrice = finalPrice * (1 + profile.duo_extra_cost / 100);
       }
     }
 
     res.json({
-      base_price: pricing.price,
+      base_price: basePrice,
       final_price: parseFloat(finalPrice.toFixed(2)),
-      estimated_hours: pricing.estimated_hours,
+      price_source: priceSource,
+      breakdown: breakdown,
+      estimated_hours: individualPricing?.estimated_hours || null,
       boost_type: boost_type || 'solo'
     });
   } catch (error) {
