@@ -113,25 +113,32 @@ export const getMyPricing = (req, res) => {
   }
 };
 
-// Calcular precio para un boost específico (UNIFICADO: bulk + individual)
+// Calcular precio para un boost específico (UNIFICADO: bulk + individual, soporta LP)
 export const calculatePrice = (req, res) => {
   const { boosterId } = req.params;
-  const { from_rank, from_division, to_rank, to_division, boost_type } = req.query;
+  const { from_rank, from_division, to_rank, to_division, boost_type, from_lp, to_lp } = req.query;
 
-  if (!from_rank || !from_division || !to_rank || !to_division) {
-    return res.status(400).json({ error: 'Missing required parameters' });
+  if (!from_rank || !to_rank) {
+    return res.status(400).json({ error: 'Missing required parameters (from_rank, to_rank)' });
   }
 
   try {
-    // 1. Primero buscar precio individual específico
-    const individualPricing = queryOne(`
-      SELECT * FROM booster_pricing 
-      WHERE booster_id = ? 
-        AND from_rank = ? 
-        AND from_division = ? 
-        AND to_rank = ? 
-        AND to_division = ?
-    `, [boosterId, from_rank, from_division, to_rank, to_division]);
+    // Convertir LP a números si están presentes
+    const fromLP = from_lp !== undefined ? parseInt(from_lp) : null;
+    const toLP = to_lp !== undefined ? parseInt(to_lp) : null;
+    
+    // 1. Primero buscar precio individual específico (solo para rangos normales)
+    let individualPricing = null;
+    if (from_division && to_division) {
+      individualPricing = queryOne(`
+        SELECT * FROM booster_pricing 
+        WHERE booster_id = ? 
+          AND from_rank = ? 
+          AND from_division = ? 
+          AND to_rank = ? 
+          AND to_division = ?
+      `, [boosterId, from_rank, from_division, to_rank, to_division]);
+    }
 
     let basePrice = null;
     let priceSource = null;
@@ -178,16 +185,21 @@ export const calculatePrice = (req, res) => {
           const bulkResult = calculateBoostPrice(
             parsedConfig,
             from_rank,
-            from_division,
+            from_division || null,
             to_rank,
-            to_division,
-            allIndividualPrices
+            to_division || null,
+            allIndividualPrices,
+            fromLP,
+            toLP
           );
 
           basePrice = bulkResult.total;
           priceSource = 'bulk';
         } catch (bulkError) {
           console.error('Error calculating bulk price:', bulkError);
+          return res.status(400).json({ 
+            error: bulkError.message || 'Error calculating price with bulk configuration'
+          });
         }
       }
     }
@@ -244,10 +256,12 @@ export const calculatePrice = (req, res) => {
         const bulkResult = calculateBoostPrice(
           parsedConfig,
           from_rank,
-          from_division,
+          from_division || null,
           to_rank,
-          to_division,
-          allIndividualPrices
+          to_division || null,
+          allIndividualPrices,
+          fromLP,
+          toLP
         );
 
         breakdown = bulkResult.breakdown || [];

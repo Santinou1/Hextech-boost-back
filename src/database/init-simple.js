@@ -37,15 +37,44 @@ const initDatabase = async () => {
       completed_orders INTEGER DEFAULT 0,
       rating REAL DEFAULT 5.0,
       total_reviews INTEGER DEFAULT 0,
-      price_per_division REAL NOT NULL,
-      price_per_win REAL NOT NULL,
-      duo_discount REAL DEFAULT 20,
+      duo_extra_cost REAL DEFAULT 20,
       available BOOLEAN DEFAULT 1,
       bio TEXT,
       avatar_url TEXT,
+      specialties TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  run(`
+    CREATE TABLE IF NOT EXISTS booster_pricing (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      booster_id INTEGER NOT NULL,
+      from_rank TEXT NOT NULL,
+      from_division TEXT NOT NULL,
+      to_rank TEXT NOT NULL,
+      to_division TEXT NOT NULL,
+      price REAL NOT NULL,
+      estimated_hours INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (booster_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(booster_id, from_rank, from_division, to_rank, to_division)
+    )
+  `);
+
+  run(`
+    CREATE TABLE IF NOT EXISTS booster_bulk_pricing (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      booster_id INTEGER NOT NULL UNIQUE,
+      league_base_prices TEXT NOT NULL,
+      transition_costs TEXT NOT NULL,
+      division_overrides TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (booster_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 
@@ -58,16 +87,22 @@ const initDatabase = async () => {
       status TEXT NOT NULL CHECK(status IN ('pending', 'in_progress', 'completed', 'cancelled')) DEFAULT 'pending',
       boost_type TEXT NOT NULL CHECK(boost_type IN ('solo', 'duo')),
       current_rank TEXT NOT NULL,
-      current_division TEXT NOT NULL,
+      current_division TEXT,
+      current_lp INTEGER DEFAULT 0,
       desired_rank TEXT NOT NULL,
       desired_division TEXT,
+      desired_lp INTEGER DEFAULT 0,
       wins_requested INTEGER,
       selected_champion TEXT,
       extras TEXT,
       total_price REAL NOT NULL,
-      current_lp INTEGER DEFAULT 0,
       progress_percentage REAL DEFAULT 0,
       estimated_completion_days INTEGER,
+      discord_username TEXT,
+      summoner_name TEXT,
+      server TEXT DEFAULT 'LAS',
+      payment_status TEXT DEFAULT 'pending' CHECK(payment_status IN ('pending', 'completed', 'failed')),
+      payment_method TEXT CHECK(payment_method IN ('transferencia', 'mercadopago')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       completed_at DATETIME,
@@ -138,9 +173,9 @@ const initDatabase = async () => {
     
     // Booster profiles
     const profiles = [
-      [4, 'ApexVayne', 'Grandmaster', 'Challenger', 'ADC, Mid', 'Vayne, Jinx, Kai\'Sa, Ahri', 'Español, English', 'LAS', 92.5, 156, 148, 4.9, 142, 25, 15, 20, 'Challenger ADC main con 5 años de experiencia en boosting.'],
-      [5, 'S14Rampage', 'Grandmaster', 'Grandmaster', 'Jungle, Top', 'Lee Sin, Graves, Kha\'Zix, Aatrox', 'Español, Português', 'LAS', 88.3, 203, 195, 4.8, 187, 22, 14, 20, 'Jungle main con enfoque en early game y control de objetivos.'],
-      [6, 'MidGapGod', 'Master', 'Grandmaster', 'Mid, Support', 'Yasuo, Zed, Syndra, Thresh', 'Español', 'LAS', 85.7, 89, 84, 4.7, 76, 20, 12, 25, 'Mid laner agresivo especializado en assassins.']
+      [4, 'ApexVayne', 'Grandmaster', 'Challenger', 'ADC, Mid', 'Vayne, Jinx, Kai\'Sa, Ahri', 'Español, English', 'LAS', 92.5, 156, 148, 4.9, 142, 20, 'Challenger ADC main con 5 años de experiencia en boosting.'],
+      [5, 'S14Rampage', 'Grandmaster', 'Grandmaster', 'Jungle, Top', 'Lee Sin, Graves, Kha\'Zix, Aatrox', 'Español, Português', 'LAS', 88.3, 203, 195, 4.8, 187, 20, 'Jungle main con enfoque en early game y control de objetivos.'],
+      [6, 'MidGapGod', 'Master', 'Grandmaster', 'Mid, Support', 'Yasuo, Zed, Syndra, Thresh', 'Español', 'LAS', 85.7, 89, 84, 4.7, 76, 25, 'Mid laner agresivo especializado en assassins.']
     ];
 
     profiles.forEach(p => {
@@ -148,9 +183,39 @@ const initDatabase = async () => {
         INSERT OR IGNORE INTO booster_profiles (
           user_id, display_name, current_rank, peak_rank, main_roles, main_champions,
           languages, server, win_rate, total_orders, completed_orders, rating, total_reviews,
-          price_per_division, price_per_win, duo_discount, bio
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          duo_extra_cost, bio
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, p);
+    });
+
+    // Booster bulk pricing - sample pricing configuration (incluyendo Master+)
+    // Primero eliminar configuraciones existentes para estos boosters
+    run(`DELETE FROM booster_bulk_pricing WHERE booster_id IN (4, 5, 6)`);
+    
+    const bulkPricing = [
+      [
+        4, // ApexVayne
+        '{"Iron":15,"Bronze":18,"Silver":22,"Gold":28,"Platinum":35,"Emerald":45,"Diamond":60,"Master":80,"Grandmaster":100,"Challenger":120}',
+        '{"Iron->Bronze":2,"Bronze->Silver":3,"Silver->Gold":4,"Gold->Platinum":5,"Platinum->Emerald":8,"Emerald->Diamond":12,"Diamond->Master":20}'
+      ],
+      [
+        5, // S14Rampage
+        '{"Iron":14,"Bronze":17,"Silver":20,"Gold":26,"Platinum":33,"Emerald":42,"Diamond":55,"Master":75,"Grandmaster":95,"Challenger":115}',
+        '{"Iron->Bronze":2,"Bronze->Silver":3,"Silver->Gold":4,"Gold->Platinum":5,"Platinum->Emerald":7,"Emerald->Diamond":11,"Diamond->Master":18}'
+      ],
+      [
+        6, // MidGapGod
+        '{"Iron":13,"Bronze":16,"Silver":19,"Gold":24,"Platinum":30,"Emerald":38,"Diamond":50,"Master":70,"Grandmaster":90,"Challenger":110}',
+        '{"Iron->Bronze":2,"Bronze->Silver":2,"Silver->Gold":3,"Gold->Platinum":4,"Platinum->Emerald":6,"Emerald->Diamond":10,"Diamond->Master":16}'
+      ]
+    ];
+
+    bulkPricing.forEach(bp => {
+      run(`
+        INSERT INTO booster_bulk_pricing (
+          booster_id, league_base_prices, transition_costs
+        ) VALUES (?, ?, ?)
+      `, bp);
     });
 
     console.log('✅ Seed data inserted successfully');

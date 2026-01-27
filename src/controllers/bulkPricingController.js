@@ -121,21 +121,17 @@ export const upsertMyBulkConfig = (req, res) => {
 
 /**
  * POST /api/pricing/bulk/calculate
- * Calcular precio de un boost
- */
-/**
- * POST /api/pricing/bulk/calculate
- * Calcular precio de un boost
+ * Calcular precio de un boost (soporta divisiones y LP)
  */
 export const calculatePrice = (req, res) => {
   try {
-    const { boosterId, fromLeague, fromDivision, toLeague, toDivision } = req.body;
+    const { boosterId, fromLeague, fromDivision, toLeague, toDivision, fromLP, toLP } = req.body;
     
-    // Validar inputs
-    if (!boosterId || !fromLeague || !fromDivision || !toLeague || !toDivision) {
+    // Validar inputs básicos
+    if (!boosterId || !fromLeague || !toLeague) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required parameters'
+        message: 'Missing required parameters (boosterId, fromLeague, toLeague)'
       });
     }
     
@@ -179,14 +175,16 @@ export const calculatePrice = (req, res) => {
       divisionOverrides
     };
     
-    // Calcular precio (pasando precios individuales)
+    // Calcular precio (pasando LP si están presentes)
     const result = calculateBoostPrice(
       parsedConfig,
       fromLeague,
-      fromDivision,
+      fromDivision || null,
       toLeague,
-      toDivision,
-      individualPrices
+      toDivision || null,
+      individualPrices,
+      fromLP !== undefined ? parseInt(fromLP) : null,
+      toLP !== undefined ? parseInt(toLP) : null
     );
     
     res.json({
